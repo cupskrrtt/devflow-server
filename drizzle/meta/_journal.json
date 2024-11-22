@@ -5,8 +5,22 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1732269140788,
-      "tag": "0000_creating_user",
+      "when": 1732308063244,
+      "tag": "0000_creating_user_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1732308562995,
+      "tag": "0001_removing_not_null_from_user",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1732309291465,
+      "tag": "0002_still_tinkering_with_updatedAt",
       "breakpoints": true
     }
   ]

@@ -1,8 +1,8 @@
 import cors from "@elysiajs/cors";
 import swagger from "@elysiajs/swagger";
-import { Elysia, t } from "elysia";
-import { CreateUserDTO } from "../schema/user";
+import { Elysia } from "elysia";
 import { AuthService } from "./services/auth";
+import { createUserWithPassword, updateUser } from "schema/user";
 
 const app = new Elysia()
 	.decorate("auth", new AuthService())
@@ -21,14 +21,16 @@ const app = new Elysia()
 			ctx.auth.login(ctx.body);
 		},
 		{
-			body: t.Omit(CreateUserDTO, [
-				"id",
-				"githubId",
-				"githubUsername",
-				"avatarUrl",
-				"createdAt",
-				"updatedAt",
-			]),
+			body: createUserWithPassword,
+		},
+	)
+	.patch(
+		"/",
+		(ctx) => {
+			ctx.auth.update(ctx.body);
+		},
+		{
+			body: updateUser,
 		},
 	)
 	.listen(3001);

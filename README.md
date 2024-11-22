@@ -12,4 +12,10 @@ To start the development server run:
 bun run dev
 ```
 
-Open http://localhost:3000/ with your browser to see the result.
+Open http://localhost:3001/ with your browser to see the result.
+
+## WARNING
+please do this sql query in your db before seeding the db
+```sql
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+```
