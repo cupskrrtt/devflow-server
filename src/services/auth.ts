@@ -1,35 +1,85 @@
 import { db } from "@/database/db";
-import { eq, sql } from "drizzle-orm";
-import { createUserWithPasswordDto, UpdateUserDTO, user } from "schema/user";
+import { user } from "@/database/schema/user";
+import { DrizzleError, eq, or } from "drizzle-orm";
+import { SignUpDto, SignInDto } from "types/auth.types";
+import { HttpStatus, ServiceResponse } from "types/response.types";
 
 export class AuthService {
-	private readonly secretKey = process.env.JWT_SECRET;
-	async login(data: createUserWithPasswordDto) {
+	async signIn(data: SignInDto): Promise<ServiceResponse> {
 		try {
-			await db.insert(user).values(data);
+			// TODO: Make the sign in process
+
+			return {
+				status: HttpStatus.OK,
+				type: "SUCCESS",
+				message: "User created successfully",
+			};
 		} catch (err) {
-			console.log(err);
+			if (err instanceof DrizzleError) {
+				return {
+					status: HttpStatus.InternalServerError,
+					type: "ERROR",
+					message: "Database error occured",
+				};
+			}
+			return {
+				status: HttpStatus.InternalServerError,
+				type: "ERROR",
+				message: "Uh oh an error occured",
+			};
 		}
-		return {
-			type: "SUCCESS",
-			message: "User created successfully",
-		};
 	}
-	async update(data: UpdateUserDTO) {
+	async signUp(data: SignUpDto): Promise<ServiceResponse> {
 		try {
-			await db
-				.update(user)
-				.set({
-					updatedAt: sql`NOW()`,
-					...data,
-				})
-				.where(eq(user.id, "bbe56954-164f-4d63-8b9a-a2c8574096bb"));
+			const isAvailable = await db
+				.select()
+				.from(user)
+				.where(or(eq(user.email, data.email), eq(user.username, data.username)))
+				.then((rows) => rows[0]);
+
+			if (isAvailable) {
+				if (isAvailable.username === data.username) {
+					return {
+						status: HttpStatus.Conflict,
+						type: "ERROR",
+						message: "Username already registered",
+					};
+				}
+				if (isAvailable.email === data.email) {
+					return {
+						status: HttpStatus.Conflict,
+						type: "ERROR",
+						message: "Email already registered",
+					};
+				}
+			}
+
+			const hashedPassword = await Bun.password.hash(data.password);
+
+			await db.insert(user).values({
+				email: data.email,
+				username: data.username,
+				password: hashedPassword,
+			});
+
+			return {
+				status: HttpStatus.Created,
+				type: "SUCCESS",
+				message: "User created successfully",
+			};
 		} catch (error) {
-			console.log(error);
+			if (error instanceof DrizzleError) {
+				return {
+					status: HttpStatus.InternalServerError,
+					type: "ERROR",
+					message: "Database error occured",
+				};
+			}
+			return {
+				status: HttpStatus.InternalServerError,
+				type: "ERROR",
+				message: "Uh oh an error occured",
+			};
 		}
-		return {
-			type: "SUCCESS",
-			message: "User created successfully",
-		};
 	}
 }
