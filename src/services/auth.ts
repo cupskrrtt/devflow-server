@@ -7,12 +7,38 @@ import { HttpStatus, ServiceResponse } from "types/response.types";
 export class AuthService {
 	async signIn(data: SignInDto): Promise<ServiceResponse> {
 		try {
-			// TODO: Make the sign in process
+			const userData = await db
+				.select()
+				.from(user)
+				.where(eq(user.email, data.email))
+				.limit(1)
+				.then((rows) => rows[0]);
+
+			if (!userData) {
+				return {
+					status: HttpStatus.Unauthorized,
+					type: "ERROR",
+					message: "Invalid Credentials",
+				};
+			}
+
+			const comparePassword = await Bun.password.verify(
+				data.password,
+				userData.password as string,
+			);
+
+			if (!comparePassword) {
+				return {
+					status: HttpStatus.Unauthorized,
+					type: "ERROR",
+					message: "Invalid Credentials",
+				};
+			}
 
 			return {
 				status: HttpStatus.OK,
 				type: "SUCCESS",
-				message: "User created successfully",
+				message: "User successfully logged in",
 			};
 		} catch (err) {
 			if (err instanceof DrizzleError) {
@@ -45,6 +71,7 @@ export class AuthService {
 						message: "Username already registered",
 					};
 				}
+
 				if (isAvailable.email === data.email) {
 					return {
 						status: HttpStatus.Conflict,

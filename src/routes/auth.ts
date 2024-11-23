@@ -1,23 +1,23 @@
 import { SignInObject, SignUpObject } from "@/models/user";
 import { AuthService } from "@/services/auth";
 import Elysia from "elysia";
+import { ControllerResponse } from "types/response.types";
+
+//TODO: find out how to implement jwt is it using jwt package or elysia/jwt
 
 export const authRoute = new Elysia({ prefix: "/auth" })
 	.decorate("auth", new AuthService())
 	.post(
 		"/signin",
-		async (ctx) => {
-			const loginUser = await ctx.auth.signIn(ctx.body);
-			if (loginUser.type === "ERROR") {
-				return {
-					type: loginUser.type,
-					message: loginUser.message,
-				};
-			}
+		async (ctx): Promise<ControllerResponse> => {
+			const data = await ctx.auth.signIn(ctx.body);
+
+			ctx.set.status = data.status;
+
 			return {
-				type: loginUser.type,
-				message: loginUser.message,
-				data: loginUser.data,
+				type: data.type,
+				message: data.message,
+				data: data.data,
 			};
 		},
 		{
@@ -26,11 +26,10 @@ export const authRoute = new Elysia({ prefix: "/auth" })
 	)
 	.post(
 		"/signup",
-		async (ctx) => {
+		async (ctx): Promise<ControllerResponse> => {
 			const data = await ctx.auth.signUp(ctx.body);
 
 			ctx.set.status = data.status;
-
 			return {
 				type: data?.type,
 				message: data?.message,
