@@ -10,9 +10,9 @@
 	},
 	"dependencies": {
 		"@elysiajs/cors": "^1.1.1",
+		"@elysiajs/jwt": "^1.1.1",
 		"@elysiajs/swagger": "^1.1.6",
 		"@paralleldrive/cuid2": "^2.2.2",
-		"@sinclair/typebox": "0.32.34",
 		"drizzle-orm": "^0.36.3",
 		"drizzle-typebox": "^0.1.1",
 		"elysia": "latest",

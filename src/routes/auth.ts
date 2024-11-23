@@ -1,12 +1,19 @@
 import { SignInObject, SignUpObject } from "@/models/user";
-import { AuthService } from "@/services/auth";
+import { AuthService, AuthServiceE } from "@/services/auth";
+import jwt from "@elysiajs/jwt";
 import Elysia from "elysia";
 import { ControllerResponse } from "types/response.types";
 
-//TODO: find out how to implement jwt is it using jwt package or elysia/jwt
-
 export const authRoute = new Elysia({ prefix: "/auth" })
-	.decorate("auth", new AuthService())
+	.use(
+		jwt({
+			name: "jwt",
+			secret: process.env.JWT_SECRET!,
+			exp: "15m",
+		}),
+	)
+	//.decorate("auth", new AuthService(db))
+	.use(AuthServiceE)
 	.post(
 		"/signin",
 		async (ctx): Promise<ControllerResponse> => {
@@ -14,10 +21,16 @@ export const authRoute = new Elysia({ prefix: "/auth" })
 
 			ctx.set.status = data.status;
 
+			const token = await ctx.jwt.sign({
+				sub: ctx.body.email,
+				iss: "devflow",
+				iat: Date.now(),
+			});
+
 			return {
 				type: data.type,
 				message: data.message,
-				data: data.data,
+				data: token,
 			};
 		},
 		{
@@ -29,13 +42,22 @@ export const authRoute = new Elysia({ prefix: "/auth" })
 		async (ctx): Promise<ControllerResponse> => {
 			const data = await ctx.auth.signUp(ctx.body);
 
+			const token = await ctx.jwt.sign({
+				sub: ctx.body.email,
+				iss: "devflow",
+				iat: Date.now(),
+			});
+
 			ctx.set.status = data.status;
+
 			return {
-				type: data?.type,
-				message: data?.message,
+				type: data.type,
+				message: data.message,
+				data: token,
 			};
 		},
 		{
 			body: SignUpObject,
 		},
-	);
+	)
+	.get("/user", (ctx) => ctx.Auth.getUser(), {});
