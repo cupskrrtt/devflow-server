@@ -15,7 +15,6 @@ export const AuthService = new Elysia({ name: "Auth.Service" })
 			secret: process.env.JWT_SECRET!,
 			exp: "15m",
 			iat: Date.now(),
-			alg: "RS512",
 		}),
 	)
 	.use(
@@ -24,7 +23,6 @@ export const AuthService = new Elysia({ name: "Auth.Service" })
 			secret: process.env.JWT_REFRESH_SECRET!,
 			exp: "7d",
 			iat: Date.now(),
-			alg: "RS512",
 		}),
 	)
 	.decorate("db", db)
