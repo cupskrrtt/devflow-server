@@ -3,17 +3,28 @@ import { user } from "@/database/schema/user";
 import jwt from "@elysiajs/jwt";
 import { DrizzleError, eq, or } from "drizzle-orm";
 import Elysia from "elysia";
-import { SignUpDto, SignInDto } from "types/auth.types";
+import { SignUpDto, SignInDto, RefreshDto } from "types/auth.types";
 import { HttpStatus, ServiceResponse } from "types/response.types";
 
-//TODO: find a way to make the service more readable
+/*Create a hybrid approach to auth using jwt*/
 
 export const AuthService = new Elysia({ name: "Auth.Service" })
 	.use(
 		jwt({
-			name: "jwt",
+			name: "accessToken",
 			secret: process.env.JWT_SECRET!,
 			exp: "15m",
+			iat: Date.now(),
+			alg: "RS512",
+		}),
+	)
+	.use(
+		jwt({
+			name: "refreshToken",
+			secret: process.env.JWT_REFRESH_SECRET!,
+			exp: "7d",
+			iat: Date.now(),
+			alg: "RS512",
 		}),
 	)
 	.decorate("db", db)
@@ -25,7 +36,10 @@ export const AuthService = new Elysia({ name: "Auth.Service" })
 			try {
 				/*Check for existing user*/
 				const isAvailable = await ctx.db
-					.select()
+					.select({
+						email: user.email,
+						username: user.username,
+					})
 					.from(user)
 					.where(
 						or(eq(user.email, data.email), eq(user.username, data.username)),
@@ -52,26 +66,43 @@ export const AuthService = new Elysia({ name: "Auth.Service" })
 
 				/*Create user*/
 				const hashedPassword = await Bun.password.hash(data.password);
-				await ctx.db.insert(user).values({
-					email: data.email,
-					username: data.username,
-					password: hashedPassword,
-				});
+				const userData = await ctx.db
+					.insert(user)
+					.values({
+						email: data.email,
+						username: data.username,
+						password: hashedPassword,
+					})
+					.returning({ id: user.id });
 
 				/*Generate token*/
-				const token = await ctx.jwt.sign({
-					sub: data.email,
+				const accessToken = await ctx.accessToken.sign({
+					sub: userData[0].id,
 					iss: "devflow",
-					iat: Date.now(),
+					iat: Math.floor(Date.now() / 1000),
+					jti: Bun.randomUUIDv7("base64", Date.now()),
+					type: "access",
+				});
+
+				const refreshToken = await ctx.refreshToken.sign({
+					sub: userData[0].id,
+					iss: "devflow",
+					iat: Math.floor(Date.now() / 1000),
+					jti: Bun.randomUUIDv7("base64", Date.now()),
+					type: "refresh",
 				});
 
 				return {
 					status: HttpStatus.Created,
 					type: "SUCCESS",
 					message: "User created successfully",
-					data: token,
+					data: {
+						accessToken,
+						refreshToken,
+					},
 				};
 			} catch (error) {
+				console.error(error);
 				if (error instanceof DrizzleError) {
 					return {
 						status: HttpStatus.InternalServerError,
@@ -95,7 +126,7 @@ export const AuthService = new Elysia({ name: "Auth.Service" })
 			try {
 				/*Get user data*/
 				const userData = await ctx.db
-					.select()
+					.select({ id: user.id, password: user.password })
 					.from(user)
 					.where(eq(user.email, data.email))
 					.limit(1)
@@ -124,17 +155,28 @@ export const AuthService = new Elysia({ name: "Auth.Service" })
 				}
 
 				/*Generate token*/
-				const token = await ctx.jwt.sign({
-					sub: data.email,
+				const accessToken = await ctx.accessToken.sign({
+					sub: userData.id,
 					iss: "devflow",
-					iat: Date.now(),
+					iat: Math.floor(Date.now() / 1000),
+					type: "access",
+				});
+
+				const refreshToken = await ctx.refreshToken.sign({
+					sub: userData.id,
+					iss: "devflow",
+					iat: Math.floor(Date.now() / 1000),
+					type: "refresh",
 				});
 
 				return {
 					status: HttpStatus.OK,
 					type: "SUCCESS",
 					message: "User successfully logged in",
-					data: token,
+					data: {
+						accessToken,
+						refreshToken,
+					},
 				};
 			} catch (err) {
 				if (err instanceof DrizzleError) {
@@ -150,5 +192,45 @@ export const AuthService = new Elysia({ name: "Auth.Service" })
 					message: "Uh oh an error occured",
 				};
 			}
+		},
+
+		/* Refresh token service
+		 * Refresh the access token by using the refresh token
+		 */
+		async refresh(data: RefreshDto): Promise<ServiceResponse> {
+			const token = await ctx.refreshToken.verify(data.refreshToken);
+
+			if (!token) {
+				return {
+					status: HttpStatus.Unauthorized,
+					type: "ERROR",
+					message: "Invalid Token",
+				};
+			}
+
+			/*Generate token*/
+			const accessToken = await ctx.accessToken.sign({
+				sub: token.sub as string,
+				iss: "devflow/auth",
+				iat: Math.floor(Date.now() / 1000),
+				type: "access",
+			});
+
+			const refreshToken = await ctx.refreshToken.sign({
+				sub: token.sub as string,
+				iss: "devflow/auth",
+				iat: Math.floor(Date.now() / 1000),
+				type: "refresh",
+			});
+
+			return {
+				status: HttpStatus.OK,
+				type: "SUCCESS",
+				message: "Token refreshed successfully",
+				data: {
+					accessToken,
+					refreshToken,
+				},
+			};
 		},
 	}));
