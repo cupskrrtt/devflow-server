@@ -1,30 +1,21 @@
 import { db } from "@/database/db";
 import { user } from "@/database/schema/user";
+import { github } from "@/lib/oauth";
 import jwt from "@elysiajs/jwt";
+import { generateState } from "arctic";
 import { DrizzleError, eq, or } from "drizzle-orm";
-import Elysia from "elysia";
-import { SignUpDto, SignInDto, RefreshDto } from "types/auth.types";
+import Elysia, { redirect } from "elysia";
+import {
+	SignUpDto,
+	SignInDto,
+	RefreshDto,
+	CallbackDto,
+} from "types/auth.types";
 import { HttpStatus, ServiceResponse } from "types/response.types";
 
 /*Create a hybrid approach to auth using jwt*/
 
 export const AuthService = new Elysia({ name: "Auth.Service" })
-	.use(
-		jwt({
-			name: "accessToken",
-			secret: process.env.JWT_SECRET!,
-			exp: "15m",
-			iat: Date.now(),
-		}),
-	)
-	.use(
-		jwt({
-			name: "refreshToken",
-			secret: process.env.JWT_REFRESH_SECRET!,
-			exp: "7d",
-			iat: Date.now(),
-		}),
-	)
 	.decorate("db", db)
 	.derive({ as: "scoped" }, (ctx) => ({
 		/* Sign Up
@@ -116,80 +107,31 @@ export const AuthService = new Elysia({ name: "Auth.Service" })
 			}
 		},
 
+		async callbackService(data: CallbackDto): Promise<ServiceResponse> {
+			const url = new URL(data.url);
+			const code = url.searchParams.get("code");
+			const state = url.searchParams.get("state");
+
+			return {
+				status: HttpStatus.OK,
+				type: "SUCCESS",
+				message: "Callback successfull",
+			};
+		},
+
 		/* Sign In Services
 		 * Sign in the user by checking if the user is available
 		 * and compare the password
 		 */
-		async signIn(data: SignInDto): Promise<ServiceResponse> {
-			try {
-				/*Get user data*/
-				const userData = await ctx.db
-					.select({ id: user.id, password: user.password })
-					.from(user)
-					.where(eq(user.email, data.email))
-					.limit(1)
-					.then((rows) => rows[0]);
+		async signIn(): Promise<ServiceResponse> {
+			const state = generateState();
+			const url = github.createAuthorizationURL(state, []);
 
-				if (!userData) {
-					return {
-						status: HttpStatus.Unauthorized,
-						type: "ERROR",
-						message: "Invalid Credentials",
-					};
-				}
-
-				/*Compare password*/
-				const comparePassword = await Bun.password.verify(
-					data.password,
-					userData.password as string,
-				);
-
-				if (!comparePassword) {
-					return {
-						status: HttpStatus.Unauthorized,
-						type: "ERROR",
-						message: "Invalid Credentials",
-					};
-				}
-
-				/*Generate token*/
-				const accessToken = await ctx.accessToken.sign({
-					sub: userData.id,
-					iss: "devflow",
-					iat: Math.floor(Date.now() / 1000),
-					type: "access",
-				});
-
-				const refreshToken = await ctx.refreshToken.sign({
-					sub: userData.id,
-					iss: "devflow",
-					iat: Math.floor(Date.now() / 1000),
-					type: "refresh",
-				});
-
-				return {
-					status: HttpStatus.OK,
-					type: "SUCCESS",
-					message: "User successfully logged in",
-					data: {
-						accessToken,
-						refreshToken,
-					},
-				};
-			} catch (err) {
-				if (err instanceof DrizzleError) {
-					return {
-						status: HttpStatus.InternalServerError,
-						type: "ERROR",
-						message: "Database error occured",
-					};
-				}
-				return {
-					status: HttpStatus.InternalServerError,
-					type: "ERROR",
-					message: "Uh oh an error occured",
-				};
-			}
+			return {
+				status: HttpStatus.TemporaryRedirect,
+				type: "SUCCESS",
+				message: String(url),
+			};
 		},
 
 		/* Refresh token service
